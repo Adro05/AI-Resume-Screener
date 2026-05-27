@@ -3,11 +3,34 @@ import pdfplumber
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-st.set_page_config(page_title="AI Resume Screener")
+st.set_page_config(
+    page_title="AI Resume Screener",
+    layout="wide"
+)
+
+st.sidebar.title("AI Resume Screener")
+
+st.sidebar.info(
+    """
+    Upload your resume and compare it with a job description using AI-powered ATS analysis.
+    """
+)
+
+st.sidebar.markdown("### Features")
+st.sidebar.write("- ATS Match Score")
+st.sidebar.write("- Skill Detection")
+st.sidebar.write("- Missing Skills")
+st.sidebar.write("- Resume Role Prediction")
+st.sidebar.write("- Resume Suggestions")
 
 st.title("📄 AI Resume Screening System")
 
-st.markdown("### Upload Resume and Compare with Job Description")
+st.markdown(
+    """
+    Analyze resumes intelligently using NLP-powered ATS scoring, 
+    skill detection, and resume optimization suggestions.
+    """
+)
 
 uploaded_file = st.file_uploader(
     "Upload Resume (PDF)",
@@ -42,21 +65,21 @@ if uploaded_file is not None and job_description != "":
 
     similarity_score = cosine_similarity(matrix)[0][1]
 
+    st.divider()
     st.subheader("✅ ATS Match Score")
 
     score = round(similarity_score * 100, 2)
 
     st.progress(int(score))
 
-    st.success(f"{score} % Match")
     if score >= 75:
-        st.info("Excellent Resume Match 🚀")
+        st.success(f"{score}% Match — Excellent Resume Match 🚀")
 
     elif score >= 50:
-        st.warning("Good Match — Resume can be improved.")
+        st.warning(f"{score}% Match — Good Match, but can be improved.")
 
     else:
-        st.error("Low Match — Add more relevant skills.")
+        st.error(f"{score}% Match — Low Match, add more relevant skills.")
 
     skills = [
         "python",
@@ -81,28 +104,41 @@ if uploaded_file is not None and job_description != "":
         if skill.lower() in resume_text.lower():
             found_skills.append(skill)
 
-        elif skill.lower() in job_description.lower():
+        if (
+            skill.lower() in job_description.lower()
+            and skill.lower() not in resume_text.lower()
+        ):
             missing_skills.append(skill)
+    st.divider()
 
-    st.subheader("🛠 Detected Skills")
+    col1, col2 = st.columns(2)
 
-    if found_skills:
-        for skill in found_skills:
-            st.write(f"✔️ {skill}")
+    with col1:
 
-    else:
-        st.write("No matching skills detected.")
-    st.subheader("❌ Missing Skills")
+        st.subheader("🛠 Detected Skills")
 
-    if missing_skills:
+        if found_skills:
 
-        for skill in missing_skills:
-            st.write(f"⚠️ {skill}")
+            for skill in found_skills:
+                st.write(f"✔️ {skill}")
 
-    else:
-        st.write("No missing skills detected.")
-    
-    
+        else:
+            st.write("No matching skills detected.")
+
+    with col2:
+
+        st.subheader("❌ Missing Skills")
+
+        if missing_skills:
+
+            for skill in missing_skills:
+                st.write(f"⚠️ {skill}")
+
+        else:
+            st.write("No missing skills detected.")
+
+    st.divider()
+
     st.subheader("🧠 Predicted Role")
 
     if "tensorflow" in found_skills or "deep learning" in found_skills:
@@ -116,17 +152,24 @@ if uploaded_file is not None and job_description != "":
 
     else:
         st.success("Software Engineer")
-    
+
+    st.divider()
+
     st.subheader("📌 Resume Improvement Suggestions")
 
-if score < 50:
-    st.warning("Add more technical skills relevant to the job description.")
+    if score < 50:
+        st.warning("Add more technical skills relevant to the job description.")
 
-if "sql" not in found_skills:
-    st.write("- Add SQL projects or certifications.")
+    if "sql" not in found_skills:
+        st.write("- Add SQL projects or certifications.")
 
-if "machine learning" not in found_skills:
-    st.write("- Include machine learning experience.")
+    if "machine learning" not in found_skills:
+        st.write("- Include machine learning experience.")
 
-if "python" not in found_skills:
-    st.write("- Highlight Python projects.")
+    if "python" not in found_skills:
+        st.write("- Highlight Python projects.")
+    st.divider()
+
+    st.caption(
+        "Built using Python, Streamlit, NLP, and Scikit-learn"
+    )
