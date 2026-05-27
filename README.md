@@ -238,8 +238,6 @@ streamlit run app.py
 https://ai-resume-screener-himnznnruqezneyi6vzmaz.streamlit.app/
 Launch the deployed Streamlit application using the badge above.
 
----
-# 📸 Screenshots
 
 ## Dashboard Preview
 
