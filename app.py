@@ -101,3 +101,32 @@ if uploaded_file is not None and job_description != "":
 
     else:
         st.write("No missing skills detected.")
+    
+    
+    st.subheader("🧠 Predicted Role")
+
+    if "tensorflow" in found_skills or "deep learning" in found_skills:
+        st.success("Machine Learning Engineer")
+
+    elif "machine learning" in found_skills:
+        st.success("Data Scientist")
+
+    elif "tableau" in found_skills or "power bi" in found_skills:
+        st.success("Data Analyst")
+
+    else:
+        st.success("Software Engineer")
+    
+    st.subheader("📌 Resume Improvement Suggestions")
+
+if score < 50:
+    st.warning("Add more technical skills relevant to the job description.")
+
+if "sql" not in found_skills:
+    st.write("- Add SQL projects or certifications.")
+
+if "machine learning" not in found_skills:
+    st.write("- Include machine learning experience.")
+
+if "python" not in found_skills:
+    st.write("- Highlight Python projects.")
