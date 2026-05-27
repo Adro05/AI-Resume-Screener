@@ -3,98 +3,215 @@
 
 <div align="center">
 
-### AI-Powered ATS Resume Analyzer using NLP, RAG & Semantic Intelligence
+### AI-Powered ATS Resume Analyzer using NLP, Semantic Search & RAG Architecture
 
-Analyze resumes intelligently using NLP-powered ATS scoring, semantic similarity, RAG retrieval, skill extraction, role prediction, and resume optimization recommendations.
+Analyze resumes intelligently using semantic embeddings, FAISS vector retrieval, AI-powered ATS scoring, recruiter-style resume analysis, and resume optimization workflows.
 
 ---
 
-![Python](https://img.shields.io/badge/Python-3.10-blue?style=for-the-badge&logo=python)
-![Streamlit](https://img.shields.io/badge/Streamlit-WebApp-red?style=for-the-badge&logo=streamlit)
-![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-ML-orange?style=for-the-badge&logo=scikit-learn)
-![NLP](https://img.shields.io/badge/NLP-SentenceTransformers-success?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.10-blue?style=for-the-badge\&logo=python)
+![Streamlit](https://img.shields.io/badge/Streamlit-WebApp-red?style=for-the-badge\&logo=streamlit)
+![FAISS](https://img.shields.io/badge/FAISS-Vector_Search-orange?style=for-the-badge)
+![SentenceTransformers](https://img.shields.io/badge/Sentence--Transformers-NLP-success?style=for-the-badge)
+![RAG](https://img.shields.io/badge/RAG-AI_Retrieval-purple?style=for-the-badge)
 
 </div>
 
 ---
 
-# 🔗 Project Links
-
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-black?style=for-the-badge&logo=github)](https://github.com/Adr005/AI-Resume-Screener)
-
-[![Streamlit](https://img.shields.io/badge/Streamlit-Live_App-red?style=for-the-badge&logo=streamlit)](PASTE_YOUR_STREAMLIT_LINK_HERE)
-
----
-
 # 🚀 Features
 
-## 📊 ATS Match Score Analysis
-- Calculates a highly accurate and balanced ATS compatibility score.
-- Uses a **Hybrid Scoring Model** combining semantic cosine similarity (via `SentenceTransformers`) with keyword skill-matching ratios.
+## ✅ AI-Powered ATS Match Score
+
+* Calculates ATS compatibility between resume and job description.
+* Uses:
+
+  * Semantic similarity analysis
+  * Skill-match evaluation
+  * Hybrid weighted ATS scoring
+* Score Formula:
+
+  * 40% Semantic Similarity
+  * 60% Skill Match Ratio
 
 ---
 
-## 🤖 RAG Resume Analysis
-- Chunks resume text and stores embeddings in a **FAISS vector index**.
-- Retrieves the top-3 most semantically relevant resume sections for any given job description using **cosine similarity over normalised inner-product search**.
+## 🤖 RAG-Based Recruiter Analysis
+
+* Implements Retrieval-Augmented Generation (RAG) architecture.
+* Splits resumes into semantic chunks using LangChain text splitters.
+* Stores embeddings inside a FAISS vector database.
+* Retrieves recruiter-relevant resume sections using semantic search.
 
 ---
 
-## 🛠 Skill Extraction Engine
-- Dynamically extracts skills using robust letter-boundary regex patterns and **alias matching** (e.g. `sklearn` → `scikit-learn`, `nodejs` → `node.js`).
-- Supports **85+ technical, analytical, DevOps, design, and PM tools** (preventing false substring positives and fully supporting versioned tools like `HTML5`, `CSS3`, `Python3`).
+## 🧠 Semantic Resume Intelligence
+
+* Uses Sentence-Transformers (`all-MiniLM-L6-v2`) for semantic embeddings.
+* Performs contextual resume-job matching beyond keyword comparison.
+* Improves ATS scoring accuracy for modern AI hiring workflows.
 
 ---
 
-## ❌ Missing Skills Detection
-- Identifies important job-relevant skills absent from the resume.
-- Helps candidates optimize resumes for ATS systems.
+## 🛠 Intelligent Skill Detection
+
+* Detects technical skills using:
+
+  * Regex-based word-boundary matching
+  * Skill alias normalization
+  * NLP-driven parsing
+* Supports:
+
+  * Python
+  * Java
+  * SQL
+  * Machine Learning
+  * TensorFlow
+  * PyTorch
+  * React
+  * Docker
+  * AWS
+  * and more.
 
 ---
 
-## 🧠 Resume Role Prediction
+## ❌ Missing Skill Detection
+
+* Identifies skills present in the Job Description but missing from the resume.
+* Generates recruiter-style improvement suggestions.
+
+---
+
+## 🧩 AI Role Prediction Engine
+
 Predicts suitable technical roles such as:
-- Machine Learning Engineer
-- Data Scientist
-- Data Analyst
-- Full Stack Developer
-- Software Engineer
+
+* Machine Learning Engineer
+* Data Scientist
+* Data Analyst
+* Full Stack Developer
+* Software Engineer
 
 based on detected skills.
 
 ---
 
-## 📌 Resume Improvement Suggestions
-Generates intelligent, **JD-aware** recommendations — suggestions are driven by skills actually required in the job description, not a fixed hardcoded list.
+## 📌 Resume Optimization Suggestions
+
+* Generates actionable ATS improvement recommendations.
+* Suggests missing skills and project improvements.
+* Helps optimize resumes for AI-driven hiring systems.
+
+---
+
+# 🧠 RAG Workflow Architecture
+
+```text
+                           ┌──────────────────────┐
+                           │  Upload Resume PDF   │
+                           └──────────┬───────────┘
+                                      │
+                                      ▼
+                           ┌──────────────────────┐
+                           │ PDF Text Extraction  │
+                           │    (pdfplumber)      │
+                           └──────────┬───────────┘
+                                      │
+                                      ▼
+                           ┌──────────────────────┐
+                           │ Resume Preprocessing │
+                           │   & Text Cleaning    │
+                           └──────────┬───────────┘
+                                      │
+                                      ▼
+                           ┌──────────────────────┐
+                           │ Resume Text Chunking │
+                           │ (LangChain Splitter) │
+                           └──────────┬───────────┘
+                                      │
+                                      ▼
+                           ┌──────────────────────┐
+                           │ Semantic Embedding   │
+                           │ SentenceTransformers │
+                           └──────────┬───────────┘
+                                      │
+                                      ▼
+                           ┌──────────────────────┐
+                           │  FAISS Vector Store  │
+                           │   Vector Indexing    │
+                           └──────────┬───────────┘
+                                      │
+                    ┌─────────────────┴─────────────────┐
+                    │                                   │
+                    ▼                                   ▼
+          ┌──────────────────────┐         ┌──────────────────────┐
+          │ Job Description      │         │ Skill Detection      │
+          │ Semantic Embedding   │         │ Regex + NLP Engine   │
+          └──────────┬───────────┘         └──────────┬───────────┘
+                     │                                │
+                     ▼                                ▼
+          ┌──────────────────────┐         ┌──────────────────────┐
+          │ Semantic Similarity  │         │ Found Skills         │
+          │ Retrieval Search     │         │ Missing Skills       │
+          └──────────┬───────────┘         │ Required Skills      │
+                     │                     └──────────┬───────────┘
+                     ▼                                │
+          ┌──────────────────────┐                   │
+          │ Top Relevant Resume  │                   │
+          │ Chunks Retrieved     │                   │
+          └──────────┬───────────┘                   │
+                     └──────────────┬────────────────┘
+                                    ▼
+                     ┌────────────────────────────┐
+                     │ Hybrid ATS Scoring Engine  │
+                     │ 40% Semantic Similarity    │
+                     │ 60% Skill Match Ratio      │
+                     └──────────┬─────────────────┘
+                                │
+                                ▼
+                ┌─────────────────────────────────┐
+                │ AI Resume Analysis Dashboard    │
+                │                                 │
+                │ • ATS Match Score               │
+                │ • RAG Recruiter Analysis        │
+                │ • Skill Detection               │
+                │ • Missing Skills Analysis       │
+                │ • Role Prediction               │
+                │ • Resume Suggestions            │
+                └─────────────────────────────────┘
+```
 
 ---
 
 # 🖥️ Dashboard Preview
 
-The dashboard provides:
+The application dashboard provides:
 
-- ATS Score Visualization
-- RAG-based Resume Intelligence (top relevant sections)
-- Resume Skill Analytics
-- Missing Skills Dashboard
-- Resume Intelligence Recommendations
-- Role Prediction Engine
-- Interactive Resume Analysis UI
+* ATS Match Score Visualization
+* Semantic Resume Analysis
+* RAG Resume Retrieval
+* Skill Detection Dashboard
+* Missing Skills Analysis
+* Role Prediction Engine
+* Resume Optimization Suggestions
+* Interactive Streamlit Interface
 
 ---
 
-# 🛠️ Tech Stack
+# ⚙️ Tech Stack
 
-| Technology | Purpose |
-|---|---|
-| Python | Backend Logic |
-| Streamlit | Interactive Web Application |
-| SentenceTransformers (`all-MiniLM-L6-v2`) | Semantic Embedding Generation |
-| FAISS (`IndexFlatIP`) | Vector Similarity Search (RAG retrieval) |
-| Scikit-learn | Cosine Similarity Scoring |
-| LangChain Text Splitter | Resume Chunking for RAG |
-| Regex (Lookaround boundaries) | Precision Skill Extraction |
-| pdfplumber | Resume Parsing |
+| Technology            | Purpose                     |
+| --------------------- | --------------------------- |
+| Python                | Core Backend Logic          |
+| Streamlit             | Interactive Web Application |
+| Sentence-Transformers | Semantic Embeddings         |
+| FAISS                 | Vector Similarity Search    |
+| LangChain             | Resume Chunking             |
+| Scikit-learn          | Similarity Analysis         |
+| NLP                   | Resume Intelligence         |
+| pdfplumber            | PDF Text Extraction         |
+| NumPy                 | Vector Operations           |
+| Regex                 | Skill Detection             |
 
 ---
 
@@ -107,154 +224,118 @@ AI-Resume-Screener/
 ├── requirements.txt
 ├── README.md
 ├── .gitignore
+├── images/
+│   └── image.png
 └── venv/
 ```
 
 ---
 
-# 🧭 System Architecture
+# 🧪 Core AI Pipeline
 
-```text
-                ┌─────────────────────┐
-                │ Resume PDF Upload   │
-                └─────────┬───────────┘
-                          │
-                          ▼
-                ┌─────────────────────┐
-                │ PDF Text Extraction │
-                │    (pdfplumber)     │
-                └─────────┬───────────┘
-                          │
-                          ▼
-                ┌─────────────────────┐
-                │ Job Description     │
-                │ Input Processing    │
-                └─────────┬───────────┘
-                          │
-                          ▼
-                ┌─────────────────────┐
-                │ SentenceTransformer │
-                │ Embedding Model     │
-                └──────┬──────────────┘
-                       │
-          ┌────────────┴────────────┐
-          ▼                         ▼
-┌─────────────────────┐   ┌─────────────────────┐
-│ FAISS Vector Index  │   │  Cosine Similarity  │
-│ (RAG Retrieval)     │   │  (ATS Score)        │
-└─────────┬───────────┘   └──────────┬──────────┘
-          │                          │
-          ▼                          ▼
-┌─────────────────────┐   ┌──────────────────────┐
-│ Top-3 Relevant      │   │  Hybrid ATS Score    │
-│ Resume Sections     │   │  Engine (40/60 mix)  │
-└─────────────────────┘   └──────────┬───────────┘
-                                     │
-               ┌─────────────────────┼────────────────────┐
-               ▼                     ▼                     ▼
-      ┌─────────────┐    ┌────────────────┐    ┌─────────────────┐
-      │ Skill       │    │ Missing Skills │    │ Role Prediction │
-      │ Detection   │    │ Detection      │    │ Engine          │
-      │ + Aliases   │    │ (JD-driven)    │    │                 │
-      └──────┬──────┘    └───────┬────────┘    └────────┬────────┘
-             │                   │                      │
-             └───────────────────┼──────────────────────┘
-                                 ▼
-                       ┌─────────────────────┐
-                       │ Resume Suggestions  │
-                       │ & Dashboard Output  │
-                       └─────────────────────┘
+## 1️⃣ Resume Parsing
+
+Extracts text from uploaded resumes using `pdfplumber`.
+
+## 2️⃣ Resume Chunking
+
+Splits resume text into semantic chunks using LangChain.
+
+## 3️⃣ Embedding Generation
+
+Generates semantic vector embeddings using Sentence-Transformers.
+
+## 4️⃣ FAISS Vector Indexing
+
+Stores embeddings in a FAISS vector database for semantic retrieval.
+
+## 5️⃣ Semantic Retrieval
+
+Retrieves recruiter-relevant resume chunks based on job description context.
+
+## 6️⃣ Hybrid ATS Scoring
+
+Combines:
+
+* Semantic similarity analysis
+* Skill overlap evaluation
+
+## 7️⃣ Resume Intelligence
+
+Performs:
+
+* Skill detection
+* Missing skill analysis
+* Role prediction
+* Resume optimization
+
+---
+
+# 📸 Screenshots
+
+## Dashboard Preview
+
+```md
+![Dashboard Screenshot](images/image.png)
 ```
-
----
-
-# ⚙️ Workflow
-
-## Step 1 — Resume Upload
-User uploads resume PDF and enters target job description. If the PDF yields no extractable text (e.g. scanned/image-based), the system raises an early warning and stops gracefully.
-
----
-
-## Step 2 — Resume Parsing
-Text is extracted from PDF using `pdfplumber`.
-
----
-
-## Step 3 — Embedding & RAG Indexing
-The resume is chunked using `LangChain RecursiveCharacterTextSplitter`. Each chunk is embedded via `SentenceTransformer (all-MiniLM-L6-v2)` and stored in a **FAISS `IndexFlatIP`** vector index with L2-normalised vectors, enabling true cosine similarity retrieval.
-
----
-
-## Step 4 — ATS Analysis
-A hybrid algorithm combines semantic cosine similarity (40% weight) with keyword skill match ratio (60% weight) to calculate the final compatibility score.
-
----
-
-## Step 5 — Resume Intelligence
-The system:
-- retrieves the top-3 most relevant resume sections via RAG,
-- extracts technical skills using robust letter-boundary regex with alias support,
-- identifies missing skills required by the JD,
-- predicts technical role,
-- generates JD-aware improvement suggestions.
-
----
-
-# ✨ Core Functionalities
-
-| Functionality | Description |
-|---|---|
-| ATS Scoring | Hybrid score combining semantic cosine similarity (40%) and skill match ratio (60%) |
-| RAG Retrieval | FAISS IndexFlatIP + normalised embeddings for top-3 relevant resume sections |
-| Skill Extraction | Word-boundary + alias scan covering 85+ standard tools |
-| Missing Skills Analysis | Detects absent required skills from the JD |
-| Role Prediction | Predicts technical domain from detected skills |
-| Resume Suggestions | JD-driven resume improvement guidance |
-| Dashboard UI | Interactive analytics interface |
-
----
-
-# 🎨 UI Features
-
-- Wide responsive dashboard layout
-- Sidebar navigation panel
-- Two-column analytics interface
-- Interactive progress indicators
-- Intelligent recommendation sections
-- Professional Streamlit styling
 
 ---
 
 # ▶️ Run Locally
 
 ```bash
+git clone https://github.com/Adro05/AI-Resume-Screener.git
+
+cd AI-Resume-Screener
+
 pip install -r requirements.txt
+
 streamlit run app.py
 ```
 
 ---
 
 # 🌐 Live Demo
-https://ai-resume-screener-himnznnruqezneyi6vzmaz.streamlit.app/
-Launch the deployed Streamlit application using the badge above.
 
+### Streamlit App
 
-## Dashboard Preview
-
-![Dashboard Screenshot](images/image.png)
+[https://ai-resume-screener-himnznnruqezneyi6vzmaz.streamlit.app/](https://ai-resume-screener-himnznnruqezneyi6vzmaz.streamlit.app/)
 
 ---
 
-# 🔮 Future Improvements
+# 🔗 Repository
 
-- Transformer-based re-ranking of RAG results
-- Resume ranking system
-- Multi-resume comparison
-- Recruiter analytics dashboard
-- LLM-powered resume optimization
-- AI-generated interview preparation
-- Semantic skill matching
-- Resume scoring analytics
+### GitHub Repository
+
+[https://github.com/Adro05/AI-Resume-Screener](https://github.com/Adro05/AI-Resume-Screener)
+
+---
+
+# 📦 Requirements
+
+Dependencies used in the project include:
+
+* streamlit
+* pdfplumber
+* sentence-transformers
+* scikit-learn
+* numpy
+* langchain-text-splitters 
+
+---
+
+# 🧠 Key Concepts Used
+
+* Retrieval-Augmented Generation (RAG)
+* Semantic Search
+* Vector Embeddings
+* FAISS Indexing
+* NLP Pipelines
+* ATS Optimization
+* Semantic Similarity
+* Resume Intelligence
+* Information Retrieval
+* Skill Extraction
 
 ---
 
@@ -262,5 +343,13 @@ Launch the deployed Streamlit application using the badge above.
 
 ### Aadhya Rohatgi
 
-B.Tech Data Science Student  
-AI • ML • NLP • Data Science
+Built using:
+
+* Python
+* Streamlit
+* NLP
+* FAISS
+* Sentence-Transformers
+* RAG Architecture
+
+Project implementation based on the AI resume analysis pipeline defined in `app.py`. 
