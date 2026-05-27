@@ -1,12 +1,22 @@
 import streamlit as st
 import pdfplumber
-from sklearn.feature_extraction.text import TfidfVectorizer
+import re
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 st.set_page_config(
     page_title="AI Resume Screener",
     layout="wide"
 )
+
+def contains_skill(text, skill):
+    escaped_skill = re.escape(skill)
+    # Use negative lookbehind and lookahead to assert that the skill is not adjacent to other letters.
+    # This prevents false substring matches (e.g., 'r' in 'programmer', 'go' in 'ongoing')
+    # while perfectly allowing matches next to numbers or symbols (e.g., 'html' in 'html5', 'python' in 'python3').
+    pattern = r'(?<![a-zA-Z])' + escaped_skill + r'(?![a-zA-Z])'
+    return bool(re.search(pattern, text, re.IGNORECASE))
+
 
 st.sidebar.title("AI Resume Screener")
 
@@ -57,18 +67,66 @@ if uploaded_file is not None and job_description != "":
 
     resume_text = extract_text_from_pdf(uploaded_file)
 
-    text_data = [resume_text, job_description]
+    # 1. Comprehensive list of standard technical, analytical, design, and product skills
+    skills = [
+        # Programming Languages
+        "python", "javascript", "typescript", "java", "c++", "c#", "go", "rust", "ruby", "php", "swift", "kotlin", "r", "html", "css", "sql", "bash",
+        # ML / AI / Data Science
+        "machine learning", "deep learning", "artificial intelligence", "natural language processing", "nlp", "computer vision", 
+        "tensorflow", "pytorch", "keras", "scikit-learn", "sklearn", "pandas", "numpy", "opencv", "nltk", "spacy",
+        # Data Analysis & BI
+        "data analysis", "tableau", "power bi", "excel", "snowflake", "bigquery", "redshift", "looker",
+        # Web Frameworks & Libraries
+        "react", "angular", "vue", "node.js", "node", "express", "django", "flask", "fastapi", "spring boot", "spring", "ruby on rails", "rails", "laravel", "streamlit",
+        # Databases
+        "postgresql", "postgres", "mysql", "mongodb", "redis", "elasticsearch", "sqlite", "oracle",
+        # Cloud / DevOps / Version Control
+        "aws", "azure", "gcp", "docker", "kubernetes", "git", "github", "gitlab", "jenkins", "terraform", "ansible", "ci/cd",
+        # Design & Product Management
+        "figma", "photoshop", "illustrator", "sketch", "ui/ux", "product management", "agile", "scrum", "jira"
+    ]
 
-    tfidf = TfidfVectorizer(stop_words='english')
+    # 2. Extract found and missing skills using robust regex word boundaries
+    found_skills = []
+    missing_skills = []
+    required_skills = []
 
-    matrix = tfidf.fit_transform(text_data)
+    for skill in skills:
+        has_in_resume = contains_skill(resume_text, skill)
+        has_in_jd = contains_skill(job_description, skill)
 
-    similarity_score = cosine_similarity(matrix)[0][1]
+        if has_in_resume:
+            found_skills.append(skill)
+
+        if has_in_jd:
+            required_skills.append(skill)
+            if not has_in_resume:
+                missing_skills.append(skill)
+
+    # 3. Calculate Text Similarity Score (using CountVectorizer to avoid 2-doc IDF suppression)
+    try:
+        count_vect = CountVectorizer(stop_words='english')
+        matrix = count_vect.fit_transform([resume_text, job_description])
+        text_similarity = cosine_similarity(matrix)[0][1]
+    except Exception:
+        text_similarity = 0.0
+
+    # 4. Calculate Skill Match Ratio
+    if required_skills:
+        skill_match_ratio = len([s for s in required_skills if s in found_skills]) / len(required_skills)
+    else:
+        # Default to resume's skill footprint if the JD mentions none of the recognized skills
+        skill_match_ratio = len(found_skills) / len(skills) if skills else 1.0
+
+    # 5. Compute Hybrid ATS Match Score (40% Text Similarity + 60% Skill Match Ratio)
+    raw_score = (text_similarity * 0.40) + (skill_match_ratio * 0.60)
+    score = round(raw_score * 100, 2)
+
+    # Ensure score is within valid Streamlit progress bar bounds [0.0, 100.0]
+    score = max(0.0, min(100.0, score))
 
     st.divider()
     st.subheader("✅ ATS Match Score")
-
-    score = round(similarity_score * 100, 2)
 
     st.progress(int(score))
 
@@ -81,34 +139,6 @@ if uploaded_file is not None and job_description != "":
     else:
         st.error(f"{score}% Match — Low Match, add more relevant skills.")
 
-    skills = [
-        "python",
-        "machine learning",
-        "sql",
-        "pandas",
-        "numpy",
-        "tensorflow",
-        "deep learning",
-        "data analysis",
-        "power bi",
-        "tableau",
-        "flask",
-        "streamlit"
-    ]
-
-    found_skills = []
-    missing_skills = []
-
-    for skill in skills:
-
-        if skill.lower() in resume_text.lower():
-            found_skills.append(skill)
-
-        if (
-            skill.lower() in job_description.lower()
-            and skill.lower() not in resume_text.lower()
-        ):
-            missing_skills.append(skill)
     st.divider()
 
     col1, col2 = st.columns(2)
