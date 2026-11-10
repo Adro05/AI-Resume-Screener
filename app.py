@@ -199,6 +199,26 @@ def resume_skill_evidence(resume_text: str) -> Dict[str, dict]:
                 "evidence": [line for line, _ in mentions[:2]],
             }
 
+    # REST API can be inferred when the resume describes backend/API work
+    # alongside a framework commonly used to build APIs. This remains inferred,
+    # not an explicit REST claim, and is shown separately in the UI.
+    if "rest api" not in result:
+        api_framework_lines = [
+            line for line in lines
+            if (skill_found(line, "fastapi") or skill_found(line, "flask"))
+            and re.search(r"\b(backend|api|apis|endpoint|endpoints|service|services)\b", line, re.I)
+        ]
+        api_work_lines = [
+            line for line in lines
+            if re.search(r"\b(api|apis|endpoint|endpoints|backend development|backend services)\b", line, re.I)
+        ]
+        if api_framework_lines and api_work_lines:
+            result["rest api"] = {
+                "credit": 0.85,
+                "status": "Related API framework and backend/API work (inferred; verify manually)",
+                "evidence": list(dict.fromkeys(api_framework_lines + api_work_lines))[:3],
+            }
+
     # Related evidence rules are deliberately conservative and visible.
     for skill, rules in RELATED_EVIDENCE.items():
         if skill in result:
@@ -396,13 +416,23 @@ if st.button("Analyze resume", type="primary", disabled=not (uploaded_file and j
             for skill in items:
                 info = resume_evidence.get(skill)
                 if info:
-                    st.write(f"✅ **{skill}** — {info['status']} (credit: {info['credit'] * 100:.0f}%)")
+                    status = info["status"].lower()
+                    if "inferred" in status:
+                        marker = "🔎"
+                    elif "framework mention only" in status:
+                        marker = "🟡"
+                    elif "listed in technical skills only" in status:
+                        marker = "🟡"
+                    else:
+                        marker = "✅"
+                    st.write(f"{marker} **{skill}** — {info['status']} (credit: {info['credit'] * 100:.0f}%)")
                     with st.expander(f"View resume evidence for {skill}"):
                         for line in info["evidence"]:
                             st.write(f"- {line}")
                 else:
                     st.write(f"⚠️ **{skill}** — no direct or supported related evidence detected")
 
+        st.caption("Legend: ✅ direct project/experience/coursework evidence · 🟡 skills-list or weak framework evidence · 🔎 inferred related evidence (verify manually) · ⚠️ no evidence detected.")
         st.caption("Related evidence is not the same as an explicit skill claim. Verify it manually before treating it as proficiency.")
 
         st.divider()
