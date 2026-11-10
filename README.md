@@ -271,15 +271,7 @@ Performs:
 
 ---
 
-# 📸 Screenshots
 
-## Dashboard Preview
-
-```md
-![Dashboard Screenshot](images/image.png)
-```
-
----
 
 # ▶️ Run Locally
 
