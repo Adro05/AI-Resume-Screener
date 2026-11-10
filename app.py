@@ -1,533 +1,329 @@
-import streamlit as st
-import pdfplumber
 import re
+from typing import List, Dict, Optional, Tuple
+
 import faiss
 import numpy as np
-
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+import pdfplumber
+import streamlit as st
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from sentence_transformers import SentenceTransformer
+
 
 # ---------------------------------------------------
 # PAGE CONFIG
 # ---------------------------------------------------
-
-st.set_page_config(
-    page_title="AI Resume Screener",
-    layout="wide"
-)
-
-# ---------------------------------------------------
-# SIDEBAR
-# ---------------------------------------------------
-
-st.sidebar.title("AI Resume Screener")
-
-st.sidebar.info(
-    """
-    Upload your resume and compare it with a job description
-    using AI-powered ATS analysis and RAG retrieval.
-    """
-)
-
-st.sidebar.markdown("### Features")
-
-st.sidebar.write("- ATS Match Score")
-st.sidebar.write("- Skill Detection")
-st.sidebar.write("- Missing Skills")
-st.sidebar.write("- Resume Role Prediction")
-st.sidebar.write("- Resume Suggestions")
-st.sidebar.write("- RAG Resume Analysis")
-
-# ---------------------------------------------------
-# TITLE
-# ---------------------------------------------------
-
+st.set_page_config(page_title="AI Resume Screener", layout="wide")
 st.title("📄 AI Resume Screening System")
-
-st.markdown(
-    """
-    Analyze resumes intelligently using NLP-powered ATS scoring,
-    semantic similarity, RAG retrieval,
-    and resume optimization suggestions.
-    """
+st.caption(
+    "Compare a resume with a job description using chunk-level semantic matching "
+    "and transparent skill coverage. Scores are screening aids, not hiring decisions."
 )
 
-# ---------------------------------------------------
-# INPUTS
-# ---------------------------------------------------
-
-uploaded_file = st.file_uploader(
-    "Upload Resume (PDF)",
-    type="pdf"
-)
-
-job_description = st.text_area(
-    "Paste Job Description Here"
-)
 
 # ---------------------------------------------------
-# PDF TEXT EXTRACTION
+# CONFIGURATION
 # ---------------------------------------------------
+SEMANTIC_WEIGHT = 0.40
+SKILL_WEIGHT = 0.60
+CHUNK_SIZE = 500          # characters; keeps chunks comfortably below model token limit
+CHUNK_OVERLAP = 100
+TOP_K = 3
+MODEL_NAME = "all-MiniLM-L6-v2"
 
-def extract_text_from_pdf(pdf_file):
-
-    text = ""
-
-    with pdfplumber.open(pdf_file) as pdf:
-
-        for page in pdf.pages:
-
-            extracted = page.extract_text()
-
-            if extracted:
-                text += extracted
-
-    return text
 
 # ---------------------------------------------------
-# TEXT CHUNKING FOR RAG
+# SKILL TAXONOMY + ALIASES
+# Keep canonical skill names unique. Aliases map alternate spellings to a canonical skill.
 # ---------------------------------------------------
+SKILLS = [
+    "python", "java", "javascript", "typescript", "c++", "c#", "go", "rust", "sql",
+    "machine learning", "deep learning", "tensorflow", "pytorch", "nlp", "rag",
+    "langchain", "transformers", "pandas", "numpy", "scikit-learn", "data analysis",
+    "react", "node.js", "django", "flask", "fastapi", "streamlit", "aws", "docker",
+    "kubernetes", "terraform", "git", "github", "mongodb", "mysql", "postgresql",
+    "tableau", "power bi"
+]
 
-def chunk_text(text):
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=100
-    )
-
-    chunks = splitter.split_text(text)
-
-    return chunks
-
-# ---------------------------------------------------
-# SKILL DETECTION
-# ---------------------------------------------------
-
-def contains_skill(text, skill):
-
-    escaped_skill = re.escape(skill)
-
-    pattern = (
-        r'(?<![a-zA-Z])'
-        + escaped_skill +
-        r'(?![a-zA-Z])'
-    )
-
-    return bool(
-        re.search(
-            pattern,
-            text,
-            re.IGNORECASE
-        )
-    )
-
-# ---------------------------------------------------
-# FIX 1: CACHE MODEL — prevents reload on every run
-# ---------------------------------------------------
-
-@st.cache_resource
-def load_model():
-    return SentenceTransformer('all-MiniLM-L6-v2')
-
-# ---------------------------------------------------
-# FIX 4: SKILL ALIASES — catches common variations
-# ---------------------------------------------------
-
-SKILL_ALIASES = {
-    "scikit-learn": ["scikit learn", "sklearn"],
-    "node.js":      ["nodejs", "node js"],
-    "nlp":          ["natural language processing"],
+SKILL_ALIASES: Dict[str, List[str]] = {
+    "javascript": ["js", "ecmascript"],
+    "typescript": ["ts"],
+    "c++": ["cpp", "c plus plus"],
+    "c#": ["c sharp", "c-sharp"],
     "machine learning": ["ml"],
-    "deep learning":    ["dl"],
-    "postgresql":   ["postgres"],
-    "javascript":   ["js"],
-    "typescript":   ["ts"],
+    "deep learning": ["dl"],
+    "nlp": ["natural language processing"],
+    "rag": ["retrieval augmented generation", "retrieval-augmented generation"],
+    "scikit-learn": ["scikit learn", "sklearn"],
+    "node.js": ["nodejs", "node js"],
+    "postgresql": ["postgres"],
+    "aws": ["amazon web services"],
+    "kubernetes": ["k8s"],
+    "power bi": ["powerbi"],
+    "github": ["git hub"],
 }
 
-def skill_in_text(text, skill):
-    """Check skill and all its known aliases against text."""
-    if contains_skill(text, skill):
-        return True
-    for alias in SKILL_ALIASES.get(skill, []):
-        if contains_skill(text, alias):
-            return True
-    return False
+
+def _phrase_pattern(phrase: str) -> re.Pattern:
+    """Match a phrase as a whole term, allowing flexible whitespace."""
+    escaped = re.escape(phrase.strip()).replace(r"\ ", r"\s+")
+    return re.compile(r"(?<!\w)" + escaped + r"(?!\w)", re.IGNORECASE)
+
+
+@st.cache_data(show_spinner=False)
+def _compiled_patterns():
+    patterns = {}
+    for skill in SKILLS:
+        variants = [skill] + SKILL_ALIASES.get(skill, [])
+        patterns[skill] = [_phrase_pattern(v) for v in variants]
+    return patterns
+
+
+def detect_skills(text: str) -> List[str]:
+    patterns = _compiled_patterns()
+    found = []
+    for skill in SKILLS:
+        if any(p.search(text or "") for p in patterns[skill]):
+            found.append(skill)
+    return found
+
 
 # ---------------------------------------------------
-# FIX 5: NAMED WEIGHT CONSTANTS — no magic numbers
+# MODEL + TEXT UTILITIES
 # ---------------------------------------------------
+@st.cache_resource(show_spinner="Loading semantic model...")
+def load_model():
+    model = SentenceTransformer(MODEL_NAME)
+    return model
 
-SEMANTIC_WEIGHT = 0.40
-SKILL_WEIGHT    = 0.60   # must sum to 1.0
 
-# ---------------------------------------------------
-# MAIN APP LOGIC
-# ---------------------------------------------------
+def extract_text_from_pdf(pdf_file) -> str:
+    pages = []
+    with pdfplumber.open(pdf_file) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text() or ""
+            if page_text.strip():
+                pages.append(page_text)
+    return "\n".join(pages)
 
-if uploaded_file is not None and job_description != "":
 
-    # ---------------------------------------------------
-    # EXTRACT RESUME TEXT
-    # ---------------------------------------------------
+def clean_text(text: str) -> str:
+    text = text.replace("\x00", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
-    resume_text = extract_text_from_pdf(uploaded_file)
 
-    # FIX 6: GUARD FOR IMAGE-BASED / EMPTY PDFs
-    if not resume_text.strip():
-        st.error(
-            "No text could be extracted from this PDF. "
-            "It may be image-based or scanned. "
-            "Please upload a text-selectable PDF."
-        )
-        st.stop()
-
-    resume_lower = resume_text.lower()
-
-    jd_lower = job_description.lower()
-
-    # ---------------------------------------------------
-    # LOAD EMBEDDING MODEL (cached)
-    # ---------------------------------------------------
-
-    model = load_model()
-
-    # ---------------------------------------------------
-    # RAG CHUNKING
-    # ---------------------------------------------------
-
-    chunks = chunk_text(resume_text)
-
-    # ---------------------------------------------------
-    # CREATE EMBEDDINGS
-    # ---------------------------------------------------
-
-    embeddings = model.encode(chunks)
-
-    embeddings = np.array(embeddings, dtype='float32')
-
-    # ---------------------------------------------------
-    # FIX 2: USE IndexFlatIP + normalise for cosine similarity
-    # L2 index returns distances (lower = better), which is
-    # the wrong direction for a similarity-based retrieval.
-    # Inner product on normalised vectors = cosine similarity.
-    # ---------------------------------------------------
-
-    faiss.normalize_L2(embeddings)
-
-    dimension = embeddings.shape[1]
-
-    index = faiss.IndexFlatIP(dimension)
-
-    index.add(embeddings)
-
-    # ---------------------------------------------------
-    # JOB DESCRIPTION EMBEDDING
-    # ---------------------------------------------------
-
-    query_embedding = model.encode([job_description])
-
-    query_embedding = np.array(query_embedding, dtype='float32')
-
-    # Normalise query too — required for IndexFlatIP
-    faiss.normalize_L2(query_embedding)
-
-    # ---------------------------------------------------
-    # RETRIEVE TOP RELEVANT CHUNKS
-    # ---------------------------------------------------
-
-    distances, indices = index.search(
-        query_embedding,
-        k=3
+def chunk_text(text: str) -> List[str]:
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        separators=["\n\n", "\n", ". ", " ", ""],
     )
+    return [chunk.strip() for chunk in splitter.split_text(text) if chunk.strip()]
 
-    retrieved_chunks = [chunks[idx] for idx in indices[0]]
 
-    # ---------------------------------------------------
-    # AI RECRUITER ANALYSIS
-    # ---------------------------------------------------
-
-    st.divider()
-
-    st.subheader("🤖 AI Recruiter Analysis")
-
-    for chunk in retrieved_chunks:
-
-        st.info(chunk)
-
-    # ---------------------------------------------------
-    # SKILL DATABASE
-    # ---------------------------------------------------
-
-    skills = [
-
-        # Programming
-        "python",
-        "java",
-        "javascript",
-        "typescript",
-        "c++",
-        "c#",
-        "go",
-        "rust",
-        "sql",
-
-        # AI / ML
-        "machine learning",
-        "deep learning",
-        "tensorflow",
-        "pytorch",
-        "nlp",
-        "rag",
-        "langchain",
-        "transformers",
-
-        # Data Science
-        "pandas",
-        "numpy",
-        "scikit-learn",
-        "data analysis",
-
-        # Web Development
-        "react",
-        "node.js",
-        "django",
-        "flask",
-        "fastapi",
-        "streamlit",
-
-        # Cloud / DevOps
-        "aws",
-        "docker",
-        "kubernetes",
-        "terraform",
-        "git",
-        "github",
-
-        # Databases
-        "mongodb",
-        "mysql",
-        "postgresql",
-
-        # Visualization
-        "tableau",
-        "power bi"
-    ]
-
-    # ---------------------------------------------------
-    # DETECT FOUND + MISSING SKILLS
-    # FIX 4 applied: uses skill_in_text() with aliases
-    # ---------------------------------------------------
-
-    found_skills    = []
-    missing_skills  = []
-    required_skills = []
-
-    for skill in skills:
-
-        skill_lower = skill.lower()
-
-        has_in_resume = skill_in_text(resume_lower, skill_lower)
-        has_in_jd     = skill_in_text(jd_lower, skill_lower)
-
-        if has_in_resume and skill not in found_skills:
-            found_skills.append(skill)
-
-        if has_in_jd:
-            if skill not in required_skills:
-                required_skills.append(skill)
-            if not has_in_resume and skill not in missing_skills:
-                missing_skills.append(skill)
-
-    # ---------------------------------------------------
-    # SKILL MATCH RATIO
-    # ---------------------------------------------------
-
-    if required_skills:
-
-        matched_skills = [
-            skill for skill in required_skills
-            if skill in found_skills
-        ]
-
-        skill_match_ratio = len(matched_skills) / len(required_skills)
-
-    else:
-
-        skill_match_ratio = 0
-
-    # ---------------------------------------------------
-    # SEMANTIC SIMILARITY SCORE
-    # ---------------------------------------------------
-
-    try:
-
-        semantic_embeddings = model.encode(
-            [resume_text, job_description]
-        )
-
-        text_similarity = cosine_similarity(
-            [semantic_embeddings[0]],
-            [semantic_embeddings[1]]
-        )[0][0]
-
-    except Exception:
-
-        text_similarity = 0.0
-
-    # ---------------------------------------------------
-    # FIX 3 + FIX 5: FINAL ATS SCORE with named constants
-    # ---------------------------------------------------
-
-    final_score = (
-        (text_similarity   * SEMANTIC_WEIGHT)
-        + (skill_match_ratio * SKILL_WEIGHT)
+def encode_normalized(model, texts: List[str]) -> np.ndarray:
+    vectors = model.encode(
+        texts,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+        batch_size=32,
     )
+    return np.asarray(vectors, dtype=np.float32)
 
-    final_score = round(final_score * 100, 2)
 
-    final_score = max(0, min(100, final_score))
+# ---------------------------------------------------
+# CHUNK-LEVEL SEMANTIC MATCHING
+# For every JD chunk, find its best matching resume chunk.
+# This avoids embedding/truncating an entire long document as one sequence.
+# ---------------------------------------------------
+def semantic_match(model, resume_chunks: List[str], jd_chunks: List[str]) -> Tuple[float, List[dict]]:
+    if not resume_chunks or not jd_chunks:
+        return 0.0, []
 
-    # ---------------------------------------------------
-    # ATS SCORE UI
-    # ---------------------------------------------------
+    resume_vectors = encode_normalized(model, resume_chunks)
+    jd_vectors = encode_normalized(model, jd_chunks)
 
-    st.divider()
+    dimension = resume_vectors.shape[1]
+    index = faiss.IndexFlatIP(dimension)  # normalized inner product = cosine similarity
+    index.add(resume_vectors)
 
-    st.subheader("✅ ATS Match Score")
+    # For each JD chunk, retrieve the single best resume chunk.
+    similarities, indices = index.search(jd_vectors, 1)
+    best_scores = np.clip(similarities[:, 0], 0.0, 1.0)
 
-    st.progress(int(final_score))
+    matches = []
+    for jd_i, (score, resume_i) in enumerate(zip(best_scores, indices[:, 0])):
+        if resume_i >= 0:
+            matches.append({
+                "score": float(score),
+                "jd_chunk": jd_chunks[jd_i],
+                "resume_chunk": resume_chunks[int(resume_i)],
+                "resume_index": int(resume_i),
+            })
 
-    if final_score >= 75:
+    # Average best-match similarity across JD chunks; not a calibrated probability.
+    semantic_score = float(np.mean(best_scores)) if len(best_scores) else 0.0
 
-        st.success(
-            f"{final_score}% Match — Excellent Resume Match 🚀"
-        )
+    # Show strongest distinct resume evidence chunks in the UI.
+    matches.sort(key=lambda item: item["score"], reverse=True)
+    top_matches = []
+    seen_resume_chunks = set()
+    for item in matches:
+        if item["resume_index"] not in seen_resume_chunks:
+            top_matches.append(item)
+            seen_resume_chunks.add(item["resume_index"])
+        if len(top_matches) == TOP_K:
+            break
 
-    elif final_score >= 50:
+    return semantic_score, top_matches
 
-        st.warning(
-            f"{final_score}% Match — Good Match, but can be improved."
-        )
 
-    else:
-
-        st.error(
-            f"{final_score}% Match — Low Match, add more relevant skills."
-        )
-
-    # ---------------------------------------------------
-    # SKILLS UI
-    # ---------------------------------------------------
-
-    st.divider()
-
-    col1, col2 = st.columns(2)
-
-    # ---------------------------------------------------
-    # DETECTED SKILLS
-    # ---------------------------------------------------
-
-    with col1:
-
-        st.subheader("🛠 Detected Skills")
-
-        if found_skills:
-
-            for skill in found_skills:
-                st.write(f"✔️ {skill}")
-
-        else:
-
-            st.write("No matching skills detected.")
-
-    # ---------------------------------------------------
-    # MISSING SKILLS
-    # ---------------------------------------------------
-
-    with col2:
-
-        st.subheader("❌ Missing Skills")
-
-        if missing_skills:
-
-            for skill in missing_skills:
-                st.write(f"⚠️ {skill}")
-
-        else:
-
-            st.write("No missing skills detected.")
-
-    # ---------------------------------------------------
-    # ROLE PREDICTION
-    # ---------------------------------------------------
-
-    st.divider()
-
-    st.subheader("🧠 Predicted Role")
-
-    if (
-        "tensorflow" in found_skills
-        or "pytorch" in found_skills
-        or "deep learning" in found_skills
-    ):
-        st.success("Machine Learning Engineer")
-
-    elif (
-        "machine learning" in found_skills
-        or "pandas" in found_skills
-    ):
-        st.success("Data Scientist")
-
-    elif (
-        "tableau" in found_skills
-        or "power bi" in found_skills
-    ):
-        st.success("Data Analyst")
-
-    elif (
-        "react" in found_skills
-        or "node.js" in found_skills
-    ):
-        st.success("Full Stack Developer")
-
-    else:
-        st.success("Software Engineer")
-
-    # ---------------------------------------------------
-    # FIX 5: RESUME SUGGESTIONS — driven by missing_skills
-    # instead of hardcoded skill checks that ignore the JD
-    # ---------------------------------------------------
-
-    st.divider()
-
-    st.subheader("📌 Resume Improvement Suggestions")
-
-    if final_score < 50:
-        st.warning(
-            "Add more technical skills relevant to the job description."
-        )
-
-    if missing_skills:
-        for skill in missing_skills:
-            st.write(
-                f"- Add experience or projects demonstrating **{skill}**."
-            )
-    else:
-        st.success(
-            "Your resume covers all the key skills mentioned in the JD!"
-        )
-
-    # ---------------------------------------------------
-    # FOOTER
-    # ---------------------------------------------------
-
-    st.divider()
-
+# ---------------------------------------------------
+# UI INPUTS
+# ---------------------------------------------------
+with st.sidebar:
+    st.header("How scoring works")
+    st.write("• 40% chunk-level semantic relevance")
+    st.write("• 60% detected required-skill coverage")
     st.caption(
-        """
-        Built using Python, Streamlit,
-        FAISS, Sentence Transformers,
-        NLP, and RAG Architecture
-        """
+        "If the job description contains no skills from the supported taxonomy, "
+        "the app uses semantic relevance alone rather than assigning a false zero skill score."
     )
+
+uploaded_file = st.file_uploader("Upload resume (PDF)", type=["pdf"])
+job_description = st.text_area("Paste the complete job description", height=240)
+
+if st.button("Analyze resume", type="primary", disabled=not (uploaded_file and job_description.strip())):
+    try:
+        with st.spinner("Extracting and analyzing resume..."):
+            resume_text = clean_text(extract_text_from_pdf(uploaded_file))
+            jd_text = clean_text(job_description)
+
+            if len(resume_text) < 40:
+                st.error(
+                    "I couldn't extract enough text from this PDF. It may be scanned/image-based. "
+                    "Please upload a text-selectable PDF."
+                )
+                st.stop()
+            if len(jd_text) < 80:
+                st.warning("The job description is very short. Add the responsibilities and requirements for a more useful comparison.")
+
+            resume_chunks = chunk_text(resume_text)
+            jd_chunks = chunk_text(jd_text)
+            if not resume_chunks or not jd_chunks:
+                st.error("Not enough text was available to perform semantic matching.")
+                st.stop()
+
+            model = load_model()
+            semantic_score, top_matches = semantic_match(model, resume_chunks, jd_chunks)
+
+            resume_skills = detect_skills(resume_text)
+            jd_skills = detect_skills(jd_text)
+            matched_skills = [s for s in jd_skills if s in resume_skills]
+            missing_skills = [s for s in jd_skills if s not in resume_skills]
+
+            skill_score: Optional[float]
+            if jd_skills:
+                skill_score = len(matched_skills) / len(jd_skills)
+                final_score = (
+                    SEMANTIC_WEIGHT * semantic_score
+                    + SKILL_WEIGHT * skill_score
+                ) * 100
+                scoring_note = "Hybrid score: 40% semantic relevance + 60% detected skill coverage."
+            else:
+                skill_score = None
+                final_score = semantic_score * 100
+                scoring_note = (
+                    "No supported taxonomy skills were detected in the job description. "
+                    "The score therefore uses semantic relevance alone; no zero skill penalty was applied."
+                )
+
+            final_score = round(float(np.clip(final_score, 0, 100)), 1)
+            semantic_percent = round(semantic_score * 100, 1)
+            skill_percent = round(skill_score * 100, 1) if skill_score is not None else None
+
+        # ---------------------------------------------------
+        # RESULTS
+        # ---------------------------------------------------
+        st.divider()
+        st.subheader("ATS Match Overview")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Overall match", f"{final_score}%")
+        c2.metric("Semantic relevance", f"{semantic_percent}%")
+        c3.metric("Skill coverage", f"{skill_percent}%" if skill_percent is not None else "N/A")
+        st.progress(int(round(final_score)))
+        st.caption(scoring_note)
+        st.caption(
+            "Interpretation: this is a heuristic resume-to-JD similarity score, not the probability "
+            "of getting shortlisted and not a universally standardized ATS score."
+        )
+
+        left, right = st.columns(2)
+        with left:
+            st.subheader("Skills detected in resume")
+            if resume_skills:
+                st.write(" · ".join(resume_skills))
+            else:
+                st.info("No skills from the current 38-skill taxonomy were detected. This does not mean the resume has no skills.")
+        with right:
+            st.subheader("Required skills found in job description")
+            if jd_skills:
+                st.write(" · ".join(jd_skills))
+            else:
+                st.info("No supported taxonomy skills were detected in this job description.")
+
+        st.subheader("Matched skills")
+        if matched_skills:
+            st.success(" · ".join(matched_skills))
+        else:
+            st.write("No exact canonical skill matches were detected from the supported taxonomy.")
+
+        st.subheader("Potential missing skills")
+        if missing_skills:
+            st.warning(" · ".join(missing_skills))
+            st.caption("Check these against the candidate's actual experience before recommending changes.")
+        else:
+            st.success("No missing skills from the supported taxonomy were detected.")
+
+        st.divider()
+        st.subheader("Most relevant resume evidence")
+        if top_matches:
+            for i, item in enumerate(top_matches, start=1):
+                with st.expander(f"Match {i} · semantic similarity {item['score'] * 100:.1f}%", expanded=(i == 1)):
+                    st.markdown("**Relevant job-description passage**")
+                    st.write(item["jd_chunk"])
+                    st.markdown("**Matching resume passage**")
+                    st.write(item["resume_chunk"])
+        else:
+            st.info("No relevant resume passages could be retrieved.")
+
+        st.divider()
+        st.subheader("Suggested next steps")
+        if missing_skills:
+            st.write("If you genuinely have experience with these requirements, make that experience easier to find in your resume:")
+            for skill in missing_skills:
+                st.write(f"• **{skill}** — add a truthful project, coursework or work-experience example if applicable.")
+        else:
+            st.write("Review whether your strongest projects and achievements clearly demonstrate the requirements in the job description.")
+
+        st.subheader("Role indication")
+        if any(s in resume_skills for s in ["tensorflow", "pytorch", "deep learning", "machine learning"]):
+            st.write("Possible direction: Machine Learning / AI roles")
+        elif any(s in resume_skills for s in ["pandas", "numpy", "tableau", "power bi", "data analysis"]):
+            st.write("Possible direction: Data Science / Data Analytics roles")
+        elif any(s in resume_skills for s in ["react", "node.js", "django", "flask", "fastapi"]):
+            st.write("Possible direction: Software / Web Development roles")
+        else:
+            st.write("Possible direction: General Software Engineering; review the resume manually for a more specific role.")
+
+    except Exception as exc:
+        st.error(f"Analysis failed: {exc}")
+        st.info("If this persists, check the PDF, installed dependencies and model download/network access.")
+
+st.divider()
+st.caption(
+    "Built with Python, Streamlit, pdfplumber, Sentence-Transformers, FAISS, "
+    "LangChain text splitting, NumPy and scikit-learn."
+)
